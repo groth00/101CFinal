@@ -1,0 +1,113 @@
+library(randomForest)
+library(class)
+library(xgboost)
+
+Mode <- function(x) {
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x, ux)))]
+}
+
+train <- read.csv("~/Downloads/101cfinaldata/train.csv", header = T, stringsAsFactors = F)
+test <- read.csv("~/Downloads/101cfinaldata/test.csv", header = T, stringsAsFactors = F)
+test_id <- test$id
+train <- train[, -c(1,2,8)]
+train$HTWins <- as.factor(train$HTWins)
+
+num_vars <- unlist(lapply(train, is.numeric))
+cormat <- cor(data.frame(plmin_vars, ast_vars))
+
+test <- test[, -c(1, 2, 7)]
+num_vars_test <- unlist(lapply(test, is.numeric))
+
+plmin <- grepl('plmin', names(train))
+ast <- grepl('ast', names(train))
+pts <- grepl('pts', names(train))
+fgm <- grepl('fgm', names(train))
+
+plmin_vars <- train[, plmin]
+ast_vars <- train[, ast]
+pts_vars <- train[, pts]
+fgm_vars <- train[, fgm]
+
+vt_s_plmin <- apply(plmin_vars[, 1:5], MARGIN = 1, FUN = mean)
+vt_os_plmin <- apply(plmin_vars[, 6:10], 1, mean)
+ht_s_plmin <- apply(plmin_vars[, 11:15], 1, mean)
+ht_os_plmin <- apply(plmin_vars[, 16:20], 1, mean)
+
+new_plmin <- cbind(vt_s_plmin, vt_os_plmin, ht_s_plmin, ht_os_plmin)
+new_plmin <- scale(new_plmin)
+
+
+summarized_ast_vars <- ast_vars[, -c(5:9, 14:18)]
+summarized_ast_vars <- scale(summarized_ast_vars)
+
+all_train <- data.frame(new_plmin, summarized_ast_vars)
+
+
+vt_s_plmin_test <- apply(plmin_vars_test[, 1:5], MARGIN = 1, FUN = mean)
+vt_os_plmin_test <- apply(plmin_vars_test[, 6:10], 1, mean)
+ht_s_plmin_test <- apply(plmin_vars_test[, 11:15], 1, mean)
+ht_os_plmin_test <- apply(plmin_vars_test[, 16:20], 1, mean)
+
+new_plmin_test <- cbind(vt_s_plmin = vt_s_plmin_test, 
+                        vt_os_plmin = vt_os_plmin_test, 
+                        ht_s_plmin = ht_s_plmin_test, 
+                        ht_os_plmin = ht_os_plmin_test)
+new_plmin_test <- scale(new_plmin_test)
+
+summarized_ast_vars_test <- ast_vars_test[, -c(5:9, 14:18)]
+summarized_ast_vars_test <- scale(summarized_ast_vars_test)
+
+all_test <- data.frame(new_plmin_test, summarized_ast_vars_test)
+
+
+rf <- randomForest(y~., data = data.frame(y = train$HTWins, all_train), mtry = 12, importance=F,
+                    sampsize = c(80, 120), cutoff = c(0.45, 0.55), ntree = 3000, nodesize = 5)
+rf
+
+
+pred_vals_rf <- rep(NA, nrow(all_test))
+predictions_rf <- predict(rf2.3, newdata = all_test, type = 'prob')
+for(i in 1:nrow(predictions_rf)) {
+  pred_vals_rf[i] <- ifelse(which.max(predictions_rf[i, ]) == 1, 'No', 'Yes') 
+}
+
+
+xg_train <- as.matrix(all_train)
+xg_label <- as.factor(train$HTWins)
+
+xg_model <- xgboost(data = data.matrix(xg_train),
+              label = as.integer(as.factor(xg_label))-1,
+              params = best_param,
+              nrounds = 40,
+              seed.number = best_seednumber)
+
+xg_pred <- predict(xg_model, newdata = data.matrix(all_test))
+xg_votes <- ifelse(xg_pred > 0.5, 'Yes', 'No')
+
+
+knn.cl <- train$HTWins
+
+knn.final <- knn(train = all_train, cl = knn.cl, test = all_test, k = 40)
+knn.final.cv <- knn.cv(train = all_train, cl = knn.cl, k = 40)
+table(knn.final.cv, train$HTWins)
+
+
+
+ind_votes <- data.frame(pred_vals_rf, xg_factor, knn.final)
+
+final_vote <- rep(NA, nrow(ind_votes))
+for(i in 1:nrow(ind_votes)) {
+  final_vote[i] <- Mode(ind_votes[i, ][[1]])
+}
+
+encoded_vote <- ifelse(final_vote == 1, 'No', 'Yes')
+
+csv_out <- data.frame(id = test_id, HTWins = encoded_vote)
+write.table(csv_out, file = '~/Downloads/submission11.csv', row.names = F, sep = ",")
+
+
+sum(pred_vals_rf == encoded_vote)/length(encoded_vote)
+sum(knn.final == encoded_vote)/length(encoded_vote)
+sum(xg_factor == encoded_vote)/length(encoded_vote)
+
