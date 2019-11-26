@@ -256,12 +256,8 @@ table(svm_pred)
 #cost = 0.1
 
 
-
-```
-
 # GBM (very simple)
 
-```{r}
 library(gbm)
 
 gb <- gbm(as.integer(as.factor(train$HTWins))-1~., 
@@ -279,8 +275,6 @@ gb_test <- data.frame(scale(plmin_vars_test), scale(ast_vars_test))
 gb_prob <- predict(gb, newdata = gb_test, type = 'response', n.trees = 1000)
 gb_pred <- ifelse(gb_prob < 0.5, 'No', 'Yes')
 
-```
-
 
 # Majority voting among models
 # Strongest is random forest, then knn, then xgboost
@@ -290,7 +284,6 @@ gb_pred <- ifelse(gb_prob < 0.5, 'No', 'Yes')
 
 # time for feature engineering?
 
-```{r}
 Mode <- function(x) {
   ux <- unique(x)
   ux[which.max(tabulate(match(x, ux)))]
@@ -321,41 +314,6 @@ encoded_vote <- ifelse(final_vote == 1, 'No', 'Yes')
 
 csv_out <- data.frame(id = test$id, HTWins = encoded_vote)
 write.table(csv_out, file = '~/Downloads/submission10.csv', row.names = F, sep = ",")
-```
-
-
-
-
-
-# Logistic Regression Model
-```{r}
-# plmin_i <- grepl('plmin', names(train))
-# plmin_vars <- train[, plmin_i]
-# a <- cbind(y, plmin_vars)
-# 
-# logistic_model <- glm(y~., family = 'binomial', data = data.frame(y, train[, plmin_i]))
-# summary(logistic_model)
-# 
-# plmin_test <- grepl('plmin', names(test))
-
-log_model <- glm(y~., family = 'binomial', data = data.frame(y, train[, num_vars]))
-summary(log_model)
-
-# multicollinearity problem, check VIF
-alias(log_model)
-vif(log_model)
-
-pred_prob <- predict(log_model, newdata = data.frame(test[, num_vars]), type='response')
-
-pred_vals <- ifelse(pred_prob > 0.5, 'Yes', 'No')
-csv_out <- data.frame(id = test$id, HTWins = pred_vals)
-
-sum(csv_out$HTWins == 'Yes')
-sum(csv_out$HTWins == 'No')
-
-write.table(csv_out, file = '~/Downloads/test_submission.csv', row.names = F, sep = ",")
-
-```
 
 
 
